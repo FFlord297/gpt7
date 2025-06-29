@@ -71,7 +71,7 @@ app.post('/login', async (req, res) => {
   res.json({ token });
 });
 
-// === Chat Endpoint (AI Integration) ===
+// === Chat Endpoint (Gemma AI Integration) ===
 app.post('/chat', authMiddleware, async (req, res) => {
   try {
     const userMessage = req.body.message;
@@ -79,24 +79,20 @@ app.post('/chat', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Message is required.' });
     }
 
-    // Hugging Face Inference API with conversational model
     const HF_API_KEY = process.env.HF_API_KEY;
     if (!HF_API_KEY) {
       return res.status(500).json({ error: 'AI API key not configured' });
     }
 
-    const response = await fetch('https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium', {
+    // Call Hugging Face Gemma model
+    const response = await fetch('https://api-inference.huggingface.co/models/google/gemma-2b-it', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${HF_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ 
-        inputs: {
-          past_user_inputs: [],
-          generated_responses: [],
-          text: userMessage
-        }
+      body: JSON.stringify({
+        inputs: userMessage
       })
     });
 
@@ -107,21 +103,11 @@ app.post('/chat', authMiddleware, async (req, res) => {
     }
 
     const data = await response.json();
-    console.log('HF API Response:', data);
-
+    // Gemma returns [{ generated_text: '...' }]
     let botReply = "Sorry, I couldn't generate a reply.";
 
-    if (data.generated_text) {
-      botReply = data.generated_text;
-    } else if (Array.isArray(data) && data[0]?.generated_text) {
+    if (Array.isArray(data) && data[0]?.generated_text) {
       botReply = data[0].generated_text;
-    } else if (data.conversation && data.conversation.generated_responses && data.conversation.generated_responses.length > 0) {
-      botReply = data.conversation.generated_responses[data.conversation.generated_responses.length - 1];
-    }
-
-    // Clean up the response - remove the original input if it's included
-    if (botReply.startsWith(userMessage)) {
-      botReply = botReply.substring(userMessage.length).trim();
     }
 
     // Save chat
